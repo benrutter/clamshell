@@ -1,6 +1,6 @@
 # clam shell 🦪
 
-experimenting with a python based shell.
+Experimental and modern python based shell
 
 Idea:
 
@@ -18,6 +18,12 @@ Special repl loop to allow:
    - then run as reformatted clam python
    - then execute as command
 
+## convenient function
+
+- files (ls equivalent) returns list
+- goto (cd equivalent) moves, including searching for location if not in directoru
+- see (cat equivalent) shows formatted file output
+- move, copy, delete do as expected
 
 ## Clam python
 Basically, allow python commands to be ran like cli
