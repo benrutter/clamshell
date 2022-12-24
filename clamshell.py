@@ -121,7 +121,6 @@ class ClamShell:
             result = self.super_exec(command)
         else:
             result = self.try_except_chain([
-                lambda: self.super_exec(command),
                 lambda: self.python_exec(command),
                 lambda: self.clam_exec(command),
                 lambda: self.shell_exec(command),
