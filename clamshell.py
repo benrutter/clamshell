@@ -2,9 +2,14 @@ import subprocess
 import os
 import pandas as pd
 import glob
+import sys
 import time
+import traceback
+from pygments.lexers.python import PythonLexer
 from rich import print
-from prompt_toolkit import prompt, print_formatted_text
+from prompt_toolkit import prompt, print_formatted_text, PromptSession
+from prompt_toolkit.lexers import PygmentsLexer
+from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from rich.console import Console
 
 def try_else_none(function):
@@ -20,6 +25,10 @@ class ClamShell:
         self.splitter = self.get_splitter()
         self.console = Console(color_system='auto')
         self.super_commands = super_commands
+        self.lexer = PygmentsLexer(PythonLexer)
+        self.globals = globals()
+        self.locals = locals()
+        self.session = PromptSession()
 
     def get_splitter(self):
         if os.name == 'nt':
@@ -70,20 +79,33 @@ class ClamShell:
         cwd = os.getcwd()
         return f" 🐚 {cwd} $ "
 
+    def with_quotes_if_undefined(self, string):
+        try:
+            exec(string)
+            return string
+        except:
+            return f'"{string}"'
+
+    def flatten_list(self, list_of_lists):
+        return [item for sublist in list_of_lists for item in sublist]
+
     def break_into_pieces(self, string):
-        pieces = string.split(' ')
-        new_pieces = []
-        for piece in pieces:
-            pass
+        pieces = string.split("'")
+        pieces = self.flatten_list([i.split('"') for i in pieces])
+        pieces = [i.replace('"', '').replace("'", '') for i in pieces]
+        pieces = [i.strip() for i in pieces]
+        pieces = [i for i in pieces if i != '']
+        pieces = [self.with_quotes_if_undefined(i) for i in pieces]
         remade = f'{pieces[0]}({", ".join(pieces[1:])})'
+        print(remade)
         return remade
 
     def python_exec(self, command: str):
         try:
-            output = eval(command)
+            output = eval(command, self.globals, self.locals)
             return output
         except:
-            return exec(command)
+            return exec(command, self.globals, self.locals)
 
     def clam_exec(self, command: str):
         reformed = self.break_into_pieces(command)
@@ -95,7 +117,6 @@ class ClamShell:
 
     def super_exec(self, command: str):
         assert len(command.strip().split(' ')) == 1
-        assert command in self.super_commands
         command += '()'
         return self.python_exec(command)
 
@@ -111,17 +132,24 @@ class ClamShell:
         try:
             return to_try()
         except Exception as e:
+            try:
+                message = e.message
+            except AttributeError:
+                message = ''
             if first_exception is None:
-                first_exception = str(repr(e))
+                first_exception = ' ! >> ' + str(repr(e))
             return self.try_except_chain(try_list[1:], first_exception)
 
     def repl_loop(self):
-        command = prompt(self.get_prompt())
+        command = self.session.prompt(
+            self.get_prompt(),
+            lexer=self.lexer,
+            auto_suggest=AutoSuggestFromHistory(),
+        )
         if command in self.super_commands:
             result = self.super_exec(command)
         else:
             result = self.try_except_chain([
-                lambda: self.super_exec(command),
                 lambda: self.python_exec(command),
                 lambda: self.clam_exec(command),
                 lambda: self.shell_exec(command),
