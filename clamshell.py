@@ -12,76 +12,42 @@ from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from rich.console import Console
 
-def try_else_none(function):
-    def wrapped_function(*args, **kwargs):
-        try:
-            return function(*args, **kwargs)
-        except:
-            return None
-    return wrapped_function
+from utils import *
+from key_bindings import key_bindings
+
 
 class ClamShell:
-    def __init__(self, super_commands: list):
-        self.splitter = self.get_splitter()
+    def __init__(self, super_commands: list = None, aliases: dict = None):
         self.console = Console(color_system='auto')
-        self.super_commands = super_commands
+        self.super_commands = coerce(super_commands, [])
+        self.aliases = coerce(aliases, [])
         self.lexer = PygmentsLexer(PythonLexer)
         self.globals = globals()
         self.locals = locals()
         self.session = PromptSession()
+        self.key_bindings = key_bindings
 
-    def get_splitter(self):
-        if os.name == 'nt':
-            return '\\'
-        return '/'
 
-    @try_else_none
-    def get_created_datetime(self, file):
-        created = os.path.getctime(file)
-        created = time.ctime(created)
-        return created
-
-    @try_else_none
-    def get_modified_datetime(self, file):
-        modified = os.path.getmtime(file)
-        modified = time.ctime(modified)
-        return modified
-
-    def get_type(self, file):
-        if os.path.isfile(file):
-            return 'file'
-        else:
-            return 'directory'
-
-    def files(self, path=None, recursive=False):
-        cwd = os.getcwd()
-        if path is None:
-            path = '**'
-        elif path[-1] == self.splitter:
-            path += '**'
-        elif path [-1] != '*':
-            path += f'{self.splitter}**'
-        file_info = [{
-            'name': i,
-            'path': f'{cwd}{self.splitter}{i}',
-            'created': self.get_created_datetime(i),
-            'modified': self.get_modified_datetime(i),
-        } for i in glob.glob(path)]
-        return file_info
-
-    def goto(self, path='.'):
-        if isinstance(path, dict):
-            os.chdir(path['path'])
-            return
-        os.chdir(path)
-
-    def get_prompt(self):
-        cwd = os.getcwd()
-        return f" 🐚 {cwd} $ "
+    def is_uncompleted(self, string):
+        completion_dict = {
+            '(': ')',
+            '{': '}',
+            '[': ']',
+            '"': '"',
+            "'": "'",
+        }
+        last = None
+        for char in string:
+            if last is not None:
+                if char == completion_dict[last]:
+                    last = None
+            elif char in list(completion_dict.keys()):
+                last = char
+        return last is not None
 
     def with_quotes_if_undefined(self, string):
         try:
-            exec(string)
+            eval(string, self.globals, self.locals)
             return string
         except:
             return f'"{string}"'
@@ -89,15 +55,31 @@ class ClamShell:
     def flatten_list(self, list_of_lists):
         return [item for sublist in list_of_lists for item in sublist]
 
+    def sandwich_split(self, string, splitters):
+        split = None
+        segments = []
+        accumulator = ''
+        for char in string:
+            if char == split:
+                segments.append(accumulator)
+                accumulator = ''
+            elif char in splitters:
+                segments.append(accumulator)
+                split = char
+                accumulator = ''
+            else:
+                accumulator += char
+        segments.append(accumulator)
+        return segments
+
     def break_into_pieces(self, string):
-        pieces = string.split("'")
-        pieces = self.flatten_list([i.split('"') for i in pieces])
-        pieces = [i.replace('"', '').replace("'", '') for i in pieces]
+        pieces = self.sandwich_split(string, ['"', "'", ' '])
         pieces = [i.strip() for i in pieces]
         pieces = [i for i in pieces if i != '']
-        pieces = [self.with_quotes_if_undefined(i) for i in pieces]
+        return pieces
+
+    def reform(self, pieces):
         remade = f'{pieces[0]}({", ".join(pieces[1:])})'
-        print(remade)
         return remade
 
     def python_exec(self, command: str):
@@ -108,12 +90,21 @@ class ClamShell:
             return exec(command, self.globals, self.locals)
 
     def clam_exec(self, command: str):
-        reformed = self.break_into_pieces(command)
+        pieces = self.break_into_pieces(command)
+        pieces = [self.with_quotes_if_undefined(i) for i in pieces]
+        reformed = self.reform(pieces)
+        assert reformed[0] not in ['"', "'"]
         return self.python_exec(reformed)
 
     def shell_exec(self, command: str):
-        subprocess.call(command)
-        return None
+        for key, value in self.aliases.items():
+            if command[:len(key)] == key:
+                command = value + command[len(value)-1:]
+                break
+        pieces = self.break_into_pieces(command)
+        output = subprocess.call(pieces)
+        output = f'\n[italic]output: {output}[/italic]'
+        return output
 
     def super_exec(self, command: str):
         assert len(command.strip().split(' ')) == 1
@@ -132,20 +123,42 @@ class ClamShell:
         try:
             return to_try()
         except Exception as e:
-            try:
-                message = e.message
-            except AttributeError:
-                message = ''
             if first_exception is None:
-                first_exception = ' ! >> ' + str(repr(e))
+                first_exception = '[red bold] ! >> [/red bold]' + str(repr(e))
             return self.try_except_chain(try_list[1:], first_exception)
 
+    def print_output(self, output):
+        if isinstance(output, list) and isinstance(output[0], dict) and output[0].get('path') is not None:
+            try:
+                df = pd.DataFrame(output)
+                self.console.print(df)
+                return
+            except:
+                pass
+        self.console.print(output)
+
     def repl_loop(self):
+
+        from prompt_toolkit.output.color_depth import ColorDepth
         command = self.session.prompt(
-            self.get_prompt(),
+            get_prompt(),
             lexer=self.lexer,
             auto_suggest=AutoSuggestFromHistory(),
+            key_bindings=self.key_bindings,
+            color_depth=ColorDepth.ANSI_COLORS_ONLY
         )
+        if command != '' and (command[-1] == ':' or self.is_uncompleted(command)):
+            new_line = None
+            while new_line != '':
+                new_line = self.session.prompt(
+                    get_continuation_prompt(),
+                    lexer=self.lexer,
+                    auto_suggest=AutoSuggestFromHistory(),
+                    key_bindings=self.key_bindings,
+                    color_depth=ColorDepth.ANSI_COLORS_ONLY
+                )
+                command += f'\n{new_line}'
+
         if command in self.super_commands:
             result = self.super_exec(command)
         else:
@@ -155,14 +168,10 @@ class ClamShell:
                 lambda: self.shell_exec(command),
             ])
         if result is not None:
-            self.console.print(result)
+            self.print_output(result)
 
 # making callable function
-app = ClamShell(['files'])
-def files(*args, **kwargs):
-    return app.files(*args, **kwargs)
+app = ClamShell(['files', 'exit'], {'python': 'python3'})
 
-def goto(*args, **kwargs):
-    return app.goto(*args, **kwargs)
 while True:
     app.repl_loop()
