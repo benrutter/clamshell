@@ -1,4 +1,5 @@
 import os
+import subprocess
 import time
 import shutil
 import glob
@@ -126,3 +127,36 @@ def get_prompt():
 
 def get_continuation_prompt():
     return " ... "
+
+
+def sandwich_split(string, splitters=[' ', '"', "'"]):
+    split = splitters[0]
+    segments = []
+    accumulator = ''
+    for char in string:
+        # if the char is out current split
+        # then this accumulator is over
+        if char == split:
+            accumulator += char
+            segments.append(accumulator)
+            accumulator = ''
+        # otherwise, if the char is a splitter
+        # then 
+        elif char in splitters:
+            split = char
+            accumulator += char
+        else:
+            accumulator += char
+    segments.append(accumulator)
+    return segments
+
+def break_into_pieces(string):
+    pieces = sandwich_split(string)
+    pieces = [i.strip() for i in pieces]
+    pieces = [i for i in pieces if i != '']
+    return pieces
+
+def run(command: str):
+    pieces = break_into_pieces(command)
+    proc = subprocess.Popen(pieces, stdout=subprocess.PIPE)
+    return proc.communicate()[0].decode()

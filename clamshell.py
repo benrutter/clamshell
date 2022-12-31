@@ -11,10 +11,18 @@ from prompt_toolkit import prompt, print_formatted_text, PromptSession
 from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from rich.console import Console
+from prompt_toolkit.output.color_depth import ColorDepth
 
 from utils import *
 from key_bindings import key_bindings
 
+def capture_and_return_exception(function):
+    def new_function(*args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except Exception as exception:
+            return f'[red bold] ! >> {str(repr(exception))}[/red bold]'
+    return new_function
 
 class ClamShell:
     def __init__(self, super_commands: list = None, aliases: dict = None):
@@ -85,15 +93,12 @@ class ClamShell:
         remade = f'{pieces[0]}({", ".join(pieces[1:])})'
         return remade
 
+    @capture_and_return_exception
     def python_exec(self, command: str):
         try:
-            output = eval(command, self.globals, self.locals)
-            return output
-        except:
-            try:
-                return exec(command, self.globals, self.locals)
-            except Exception as e:
-                return str(repr(e))
+            return eval(command, self.globals, self.locals)
+        except SyntaxError:
+            return exec(command, self.globals, self.locals)
 
     def clam_compile(self, command:str):
         pieces = self.break_into_pieces(command)
@@ -101,6 +106,7 @@ class ClamShell:
         reformed = self.reform(pieces)
         return reformed
 
+    @capture_and_return_exception
     def clam_exec(self, command: str):
         reformed = self.clam_compile(command)
         try:
@@ -108,6 +114,7 @@ class ClamShell:
         except Exceptions as e:
             return str(repr(e))
 
+    @capture_and_return_exception
     def shell_exec(self, command: str):
         for key, value in self.aliases.items():
             if command[:len(key)] == key:
@@ -116,8 +123,8 @@ class ClamShell:
         pieces = self.break_into_pieces(command)
         output = subprocess.call(pieces)
         output = f'\n[italic]output: {output}[/italic]'
-        return output
 
+    @capture_and_return_exception
     def super_exec(self, command: str):
         assert len(command.strip().split(' ')) == 1
         command += '()'
@@ -156,39 +163,29 @@ class ClamShell:
         except SyntaxError:
             return False
 
-    def code_checks_out(self, command):
-        return self.compiles_without_errors(
-            command,
-        ) and self.all_names_seem_defined(
-            command,
-        )
-
-    def all_names_seem_defined(self, command):
-        for char in ['(', ')', '=', '+', '-', '{', '}', '[', ']']:
-            command = command.replace(char, ' ')
-        pieces = self.break_into_pieces(command)
-        for piece in pieces:
-            try:
-                eval(piece)
-            except NameError:
-                return False
-        return True
-
-    def determine_code_method_to_run(self, command) -> str:
+    def meta_exec(self, command):
+        # rule is, will it compile as python or clam?
+        # if it works as one, run
+        # if that throws a name error, then
         if command in self.super_commands:
-            return 'super'
-        elif '\n' in command:
-            return 'python'
-        elif self.code_checks_out(command):
-            return 'python'
-        elif self.code_checks_out(self.clam_compile(command)):
-            return 'clam'
+            return self.super_exec(command)
+        elif self.compiles_without_errors(command):
+            result = self.python_exec(command)
+        elif self.compiles_without_errors(self.clam_compile(command)):
+            result = self.clam_exec(command)
         else:
-            return 'shell'
+            result = self.shell_exec(command)
+        if isinstance(result, str) and result.startswith('[red bold] ! >> NameError('):
+            return self.shell_exec(command)
+        return result
 
-    def repl_loop(self):
+    def repl(self):
+        command = self.prompt()
+        result = self.meta_exec(command)
+        if result is not None:
+            self.print_output(result)
 
-        from prompt_toolkit.output.color_depth import ColorDepth
+    def prompt(self):
         command = self.session.prompt(
             get_prompt(),
             lexer=self.lexer,
@@ -207,21 +204,11 @@ class ClamShell:
                     color_depth=ColorDepth.ANSI_COLORS_ONLY
                 )
                 command += f'\n{new_line}'
-        mode = self.determine_code_method_to_run(command)
-        if mode == 'super':
-            result = self.super_exec(command)
-        elif mode == 'python':
-            result = self.python_exec(command)
-        elif mode == 'clam':
-            result = self.clam_exec(command)
-        elif mode == 'shell':
-            result = self.shell_exec(command)
+        return command
 
-        if result is not None:
-            self.print_output(result)
 
 # making callable function
-app = ClamShell(['files', 'exit'], {'python': 'python3'})
+clamshell = ClamShell(['files', 'exit'], {'python': 'python3'})
 
 while True:
-    app.repl_loop()
+    clamshell.repl()
