@@ -27,7 +27,6 @@ class ClamShell:
         self.session = PromptSession()
         self.key_bindings = key_bindings
 
-
     def is_uncompleted(self, string):
         completion_dict = {
             '(': ')',
@@ -55,25 +54,29 @@ class ClamShell:
     def flatten_list(self, list_of_lists):
         return [item for sublist in list_of_lists for item in sublist]
 
-    def sandwich_split(self, string, splitters):
-        split = None
+    def sandwich_split(self, string, splitters=[' ', '"', "'"]):
+        split = splitters[0]
         segments = []
         accumulator = ''
         for char in string:
+            # if the char is out current split
+            # then this accumulator is over
             if char == split:
+                accumulator += char
                 segments.append(accumulator)
                 accumulator = ''
+            # otherwise, if the char is a splitter
+            # then 
             elif char in splitters:
-                segments.append(accumulator)
                 split = char
-                accumulator = ''
+                accumulator += char
             else:
                 accumulator += char
         segments.append(accumulator)
         return segments
 
     def break_into_pieces(self, string):
-        pieces = self.sandwich_split(string, ['"', "'", ' '])
+        pieces = self.sandwich_split(string)
         pieces = [i.strip() for i in pieces]
         pieces = [i for i in pieces if i != '']
         return pieces
@@ -87,14 +90,23 @@ class ClamShell:
             output = eval(command, self.globals, self.locals)
             return output
         except:
-            return exec(command, self.globals, self.locals)
+            try:
+                return exec(command, self.globals, self.locals)
+            except Exception as e:
+                return str(repr(e))
+
+    def clam_compile(self, command:str):
+        pieces = self.break_into_pieces(command)
+        pieces = [pieces[0]] + [self.with_quotes_if_undefined(i) for i in pieces[1:]]
+        reformed = self.reform(pieces)
+        return reformed
 
     def clam_exec(self, command: str):
-        pieces = self.break_into_pieces(command)
-        pieces = [self.with_quotes_if_undefined(i) for i in pieces]
-        reformed = self.reform(pieces)
-        assert reformed[0] not in ['"', "'"]
-        return self.python_exec(reformed)
+        reformed = self.clam_compile(command)
+        try:
+            return self.python_exec(reformed)
+        except Exceptions as e:
+            return str(repr(e))
 
     def shell_exec(self, command: str):
         for key, value in self.aliases.items():
@@ -137,6 +149,43 @@ class ClamShell:
                 pass
         self.console.print(output)
 
+    def compiles_without_errors(self, command):
+        try:
+            compile(command, '<string>', mode='exec')
+            return True
+        except SyntaxError:
+            return False
+
+    def code_checks_out(self, command):
+        return self.compiles_without_errors(
+            command,
+        ) and self.all_names_seem_defined(
+            command,
+        )
+
+    def all_names_seem_defined(self, command):
+        for char in ['(', ')', '=', '+', '-', '{', '}', '[', ']']:
+            command = command.replace(char, ' ')
+        pieces = self.break_into_pieces(command)
+        for piece in pieces:
+            try:
+                eval(piece)
+            except NameError:
+                return False
+        return True
+
+    def determine_code_method_to_run(self, command) -> str:
+        if command in self.super_commands:
+            return 'super'
+        elif '\n' in command:
+            return 'python'
+        elif self.code_checks_out(command):
+            return 'python'
+        elif self.code_checks_out(self.clam_compile(command)):
+            return 'clam'
+        else:
+            return 'shell'
+
     def repl_loop(self):
 
         from prompt_toolkit.output.color_depth import ColorDepth
@@ -158,15 +207,16 @@ class ClamShell:
                     color_depth=ColorDepth.ANSI_COLORS_ONLY
                 )
                 command += f'\n{new_line}'
-
-        if command in self.super_commands:
+        mode = self.determine_code_method_to_run(command)
+        if mode == 'super':
             result = self.super_exec(command)
-        else:
-            result = self.try_except_chain([
-                lambda: self.python_exec(command),
-                lambda: self.clam_exec(command),
-                lambda: self.shell_exec(command),
-            ])
+        elif mode == 'python':
+            result = self.python_exec(command)
+        elif mode == 'clam':
+            result = self.clam_exec(command)
+        elif mode == 'shell':
+            result = self.shell_exec(command)
+
         if result is not None:
             self.print_output(result)
 
