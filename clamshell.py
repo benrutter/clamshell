@@ -34,6 +34,7 @@ class ClamShell:
         self.locals = locals()
         self.session = PromptSession()
         self.key_bindings = key_bindings
+        self.run_repl = True
 
     def is_uncompleted(self, string):
         completion_dict = {
@@ -179,6 +180,7 @@ class ClamShell:
             return self.shell_exec(command)
         return result
 
+    @capture_and_return_exception
     def repl(self):
         command = self.prompt()
         result = self.meta_exec(command)
@@ -206,9 +208,18 @@ class ClamShell:
                 command += f'\n{new_line}'
         return command
 
+    def exit(self):
+        self.run_repl = False
+
 
 # making callable function
 clamshell = ClamShell(['files', 'exit'], {'python': 'python3'})
 
-while True:
-    clamshell.repl()
+def exitt():
+    clamshell.exit()
+
+while clamshell.run_repl:
+    try:
+        clamshell.repl()
+    except KeyboardInterrupt:
+        clamshell.print_output('')

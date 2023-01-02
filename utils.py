@@ -27,6 +27,14 @@ def try_else_none(function):
             return None
     return wrapped_function
 
+def try_else_empty_list(function):
+    def wrapped_function(*args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except:
+            return []
+    return wrapped_function
+
 @try_else_none
 def get_created_datetime(file):
     created = os.path.getctime(file)
@@ -59,7 +67,7 @@ def files(path=None, recursive=False):
         'created': get_created_datetime(i),
         'modified': get_modified_datetime(i),
         'type': get_type(i),
-    } for i in glob.glob(path)]
+    } for i in glob.glob(path, recursive=recursive)]
     return file_info
 
 def map_all_dirs(parent, current_depth=0, max_depth=3):
@@ -160,3 +168,29 @@ def run(command: str):
     pieces = break_into_pieces(command)
     proc = subprocess.Popen(pieces, stdout=subprocess.PIPE)
     return proc.communicate()[0].decode()
+
+@try_else_empty_list
+def file_line_matches(search_string: str, file_to_search: dict):
+    matches = []
+    with open(file_to_search['path'], 'r') as match:
+        lines = match.readlines()
+    for i, line in enumerate(lines):
+        if search_string in line:
+            matches.append({
+                'name': file_to_search['name'],
+                'path': file_to_search['path'],
+                'line_number': i,
+                'line': line,
+            })
+    return matches
+
+def search(search_string: str, path: str = None, recursive=False):
+    files_to_search = files(path, recursive)
+    files_to_search = [i for i in files_to_search if i['type'] == 'file']
+    matches = []
+    for file_to_search in files_to_search:
+        try:
+            matches += file_line_matches(search_string, file_to_search)
+        except:
+            import pdb; pdb.set_trace()
+    return matches
