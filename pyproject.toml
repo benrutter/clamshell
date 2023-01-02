@@ -1,0 +1,13 @@
+[build-system]
+requires = ["flit_core>=3.2"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "clam"
+version = "0.1"
+description = "An experimental shell for the modern age!"
+readme = "README.md"
+requires-python = ">=3.6"
+
+[pyproject.scripts]
+clam = "clam.main:run_clam" 
