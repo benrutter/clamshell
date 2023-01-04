@@ -165,7 +165,10 @@ class ClamShell:
         else:
             result = self.shell_exec(command)
         if isinstance(result, str) and result.startswith('[red bold] ! >> NameError('):
-            return self.shell_exec(command)
+            python_result = result
+            result = self.shell_exec(command)
+            if isinstance(result, str) and result.startswith('[red bold] ! >> FileNotFoundError('):
+                result = python_result
         return result
 
     @capture_and_return_exception

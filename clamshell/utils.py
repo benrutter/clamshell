@@ -12,12 +12,20 @@ def get_splitter():
         return '\\'
     return '/'
 
+def get_home():
+    if os.name == 'nt':
+        return os.environ['USERPROFILE']
+    else:
+        return '/home'
+
+
+splitter = get_splitter()
+home = get_home()
+
 def coerce(value, default):
     if value:
         return value
     return default
-
-splitter = get_splitter()
 
 def try_else_none(function):
     def wrapped_function(*args, **kwargs):
@@ -70,27 +78,30 @@ def files(path=None, recursive=False):
     } for i in glob.glob(path, recursive=recursive)]
     return file_info
 
-def map_all_dirs(parent, current_depth=0, max_depth=3):
+def map_all_dirs(parent, current_depth=0, max_depth=2):
     # if we've hit bottom depth, we'll return empty list
     if current_depth > max_depth:
         return []
     # otherwise, let's add all children to the list
     # and then return it
     new_dirs = [i['path'] for i in files(parent) if i['type'] == 'directory']
+    # lets get rid of windows non-dot "AppData" which will map too many things
+    new_dirs = [i for i in new_dirs if 'AppData' not in i]
     # then add recursive steps
     to_recur = new_dirs.copy()
     for i in to_recur:
         new_dirs += map_all_dirs(i, current_depth+1, max_depth)
     return new_dirs
 
-directory_map = map_all_dirs('/home')
+directory_map = map_all_dirs(home)
+
 def goto(path='.'):
     if isinstance(path, dict):
         path = path['path']
     try:
         os.chdir(path)
     except:
-        match = [i for i in directory_map if i.rsplit(splitter, 1)[-1] == path.rsplit(splitter, 1)[-1]]
+        match = [i for i in directory_map if i.endswith(path)]
         assert len(match) > 0, 'No matching directory found'
         os.chdir(match[0])
 
@@ -189,8 +200,6 @@ def search(search_string: str, path: str = None, recursive=False):
     files_to_search = [i for i in files_to_search if i['type'] == 'file']
     matches = []
     for file_to_search in files_to_search:
-        try:
-            matches += file_line_matches(search_string, file_to_search)
-        except:
-            import pdb; pdb.set_trace()
+        matches += file_line_matches(search_string, file_to_search)
     return matches
+

@@ -1,10 +1,12 @@
+from os import environ
+
 from .shell import ClamShell
 from .utils import files, delete, search, copy, move, goto, read, make_file, make_directory, get_prompt, get_continuation_prompt, run
 
 # making callable function
 clamshell = ClamShell(
     super_commands=['files', 'exit'],
-    aliases={'python': 'python3'},
+    aliases={'_': '_'},
     get_prompt=get_prompt,
     get_continuation_prompt=get_continuation_prompt,
 )
