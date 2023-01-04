@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 import time
 import shutil
@@ -21,6 +22,7 @@ def get_home():
 
 splitter = get_splitter()
 home = get_home()
+original_path = sys.path.copy()
 
 def coerce(value, default):
     if value:
@@ -96,6 +98,7 @@ def map_all_dirs(parent, current_depth=0, max_depth=2):
 directory_map = map_all_dirs(home)
 
 def goto(path='.'):
+    old_location = os.getcwd()
     if isinstance(path, dict):
         path = path['path']
     try:
@@ -104,6 +107,13 @@ def goto(path='.'):
         match = [i for i in directory_map if i.endswith(path)]
         assert len(match) > 0, 'No matching directory found'
         os.chdir(match[0])
+    # now let's add the current directory to the path
+    # and remove the previous one
+    new_location = os.getcwd()
+    if new_location not in sys.path:
+        sys.path.append(new_location)
+    if old_location not in original_path and old_location in sys.path:
+        sys.path.remove(old_location)
 
 
 def delete(path: str):
