@@ -142,6 +142,9 @@ def read(source: str):
     return output
 
 def make_file(path: str):
+    split_path = path.rsplit(splitter, 1)
+    if len(split_path) > 1:
+        os.makedirs(split_path[0], exist_ok=True)
     with open(path, 'w'):
         pass
     return f'[green]{path} created[/green]'

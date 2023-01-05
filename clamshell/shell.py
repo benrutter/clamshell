@@ -1,5 +1,6 @@
 import subprocess
 import os
+import threading
 import pandas as pd
 import glob
 import sys
@@ -10,40 +11,68 @@ from rich import print
 from prompt_toolkit import prompt, print_formatted_text, PromptSession
 from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+from prompt_toolkit.history import FileHistory
 from rich.console import Console
 from prompt_toolkit.output.color_depth import ColorDepth
 
 from .utils import *
 from .key_bindings import key_bindings
 
+
 def capture_and_return_exception(function):
     def new_function(*args, **kwargs):
         try:
             return function(*args, **kwargs)
         except Exception as exception:
-            return f'[red bold] ! >> {str(repr(exception))}[/red bold]'
+            return f"[red bold] ! >> {str(repr(exception))}[/red bold]"
+
     return new_function
 
 class ClamShell:
-    def __init__(self, super_commands: list = None, aliases: dict = None, get_prompt = get_prompt, get_continuation_prompt=get_continuation_prompt):
-        self.console = Console(color_system='auto')
+    def __init__(
+        self,
+        super_commands: list = None,
+        aliases: dict = None,
+        get_prompt=get_prompt,
+        get_continuation_prompt=get_continuation_prompt,
+        shell_globals=None,
+        shell_locals=None,
+    ):
+        self.console = Console(color_system="auto")
         self.super_commands = coerce(super_commands, [])
         self.aliases = coerce(aliases, [])
         self.lexer = PygmentsLexer(PythonLexer)
-        self.globals = globals()
-        self.locals = locals()
-        self.session = PromptSession()
+        self.globals = coerce(shell_globals, globals())
+        self.locals = coerce(shell_locals, locals())
+        history_file = self.history_file()
+        self.session = PromptSession(history=FileHistory(history_file))
         self.key_bindings = key_bindings
         self.run_repl = True
         self.get_prompt = get_prompt
         self.get_continuation_prompt = get_continuation_prompt
+        self.command = None
 
+    def history_file(self):
+        home = get_home()
+        splitter = get_splitter()
+        history_file = f'{home}{splitter}.config{splitter}clamshell{splitter}history'
+        if not os.path.exists(history_file):
+            make_file(history_file)
+        return history_file
+
+    def rc_file(self):
+        home = get_home()
+        splitter = get_splitter()
+        rc_file = f'{home}{splitter}.config{splitter}clamshell{splitter}clamrc.py'
+        if not os.path.exists(rc_file):
+            make_file(rc_file)
+        return rc_file
 
     def is_uncompleted(self, string):
         completion_dict = {
-            '(': ')',
-            '{': '}',
-            '[': ']',
+            "(": ")",
+            "{": "}",
+            "[": "]",
             '"': '"',
             "'": "'",
         }
@@ -66,19 +95,19 @@ class ClamShell:
     def flatten_list(self, list_of_lists):
         return [item for sublist in list_of_lists for item in sublist]
 
-    def sandwich_split(self, string, splitters=[' ', '"', "'"]):
+    def sandwich_split(self, string, splitters=[" ", '"', "'"]):
         split = splitters[0]
         segments = []
-        accumulator = ''
+        accumulator = ""
         for char in string:
             # if the char is out current split
             # then this accumulator is over
             if char == split:
                 accumulator += char
                 segments.append(accumulator)
-                accumulator = ''
+                accumulator = ""
             # otherwise, if the char is a splitter
-            # then 
+            # then
             elif char in splitters:
                 split = char
                 accumulator += char
@@ -90,7 +119,7 @@ class ClamShell:
     def break_into_pieces(self, string):
         pieces = self.sandwich_split(string)
         pieces = [i.strip() for i in pieces]
-        pieces = [i for i in pieces if i != '']
+        pieces = [i for i in pieces if i != ""]
         return pieces
 
     def reform(self, pieces):
@@ -104,7 +133,7 @@ class ClamShell:
         except SyntaxError:
             return exec(command, self.globals, self.locals)
 
-    def clam_compile(self, command:str):
+    def clam_compile(self, command: str):
         pieces = self.break_into_pieces(command)
         pieces = [pieces[0]] + [self.with_quotes_if_undefined(i) for i in pieces[1:]]
         reformed = self.reform(pieces)
@@ -121,21 +150,25 @@ class ClamShell:
     @capture_and_return_exception
     def shell_exec(self, command: str):
         for key, value in self.aliases.items():
-            if command[:len(key)] == key:
-                command = value + command[len(value)-1:]
+            if command[: len(key)] == key:
+                command = value + command[len(key) :]
                 break
         pieces = self.break_into_pieces(command)
         output = subprocess.call(pieces)
-        output = f'\n[italic]output: {output}[/italic]'
+        output = f"\n[italic]output: {output}[/italic]"
 
     @capture_and_return_exception
     def super_exec(self, command: str):
-        assert len(command.strip().split(' ')) == 1
-        command += '()'
+        assert len(command.strip().split(" ")) == 1
+        command += "()"
         return self.python_exec(command)
 
     def print_output(self, output):
-        if isinstance(output, list) and isinstance(output[0], dict) and output[0].get('path') is not None:
+        if (
+            isinstance(output, list)
+            and isinstance(output[0], dict)
+            and output[0].get("path") is not None
+        ):
             try:
                 df = pd.DataFrame(output)
                 self.console.print(df)
@@ -146,7 +179,7 @@ class ClamShell:
 
     def compiles_without_errors(self, command):
         try:
-            compile(command, '<string>', mode='exec')
+            compile(command, "<string>", mode="exec")
             return True
         except SyntaxError:
             return False
@@ -164,42 +197,51 @@ class ClamShell:
             result = self.clam_exec(command)
         else:
             result = self.shell_exec(command)
-        if isinstance(result, str) and result.startswith('[red bold] ! >> NameError('):
+        if isinstance(result, str) and result.startswith("[red bold] ! >> NameError("):
             python_result = result
             result = self.shell_exec(command)
-            if isinstance(result, str) and result.startswith('[red bold] ! >> FileNotFoundError('):
+            if isinstance(result, str) and result.startswith(
+                "[red bold] ! >> FileNotFoundError("
+            ):
                 result = python_result
         return result
 
-    @capture_and_return_exception
     def repl(self):
         command = self.prompt()
         result = self.meta_exec(command)
         if result is not None:
             self.print_output(result)
 
-    def prompt(self):
-        command = self.session.prompt(
+    def initial_prompt(self):
+        self.command = self.session.prompt(
             self.get_prompt(),
             lexer=self.lexer,
             auto_suggest=AutoSuggestFromHistory(),
             key_bindings=self.key_bindings,
-            color_depth=ColorDepth.ANSI_COLORS_ONLY
+            color_depth=ColorDepth.ANSI_COLORS_ONLY,
         )
-        if command != '' and (command[-1] == ':' or self.is_uncompleted(command)):
-            new_line = None
-            while new_line != '':
-                new_line = self.session.prompt(
-                    self.get_continuation_prompt(),
-                    lexer=self.lexer,
-                    auto_suggest=AutoSuggestFromHistory(),
-                    key_bindings=self.key_bindings,
-                    color_depth=ColorDepth.ANSI_COLORS_ONLY
-                )
-                command += f'\n{new_line}'
-        return command
+
+    def continuation_prompt(self):
+        new_line = None
+        while new_line != "":
+            new_line = self.session.prompt(
+                self.get_continuation_prompt(),
+                lexer=self.lexer,
+                auto_suggest=AutoSuggestFromHistory(),
+                key_bindings=self.key_bindings,
+                color_depth=ColorDepth.ANSI_COLORS_ONLY,
+            )
+            self.command += f"\n{new_line}"
+
+    def prompt(self):
+        th = threading.Thread(target=self.initial_prompt)
+        th.start()
+        th.join()
+        if self.command != "" and (self.command[-1] == ":" or self.is_uncompleted(self.command)):
+            th = threading.Thread(target=self.continuation_prompt)
+            th.start()
+            th.join()
+        return self.command
 
     def exit(self):
         self.run_repl = False
-
-
