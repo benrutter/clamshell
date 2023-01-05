@@ -3,11 +3,11 @@ from os import environ
 from rich import print
 
 from .shell import ClamShell
-from .utils import files, delete, search, copy, move, goto, read, make_file, make_directory, get_prompt, get_continuation_prompt, run
+from .utils import files, delete, search, copy, move, goto, read, make_file, make_directory, get_prompt, get_continuation_prompt, run, clear
 
 # making callable function
 clamshell = ClamShell(
-    super_commands=['files', 'exit'],
+    super_commands=['files', 'exit', 'clear'],
     aliases={'_': '_'},
     get_prompt=get_prompt,
     get_continuation_prompt=get_continuation_prompt,

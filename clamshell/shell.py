@@ -1,13 +1,14 @@
 import subprocess
 import os
 import threading
-import pandas as pd
 import glob
 import sys
 import time
 import traceback
+from collections import defaultdict
 from pygments.lexers.python import PythonLexer
 from rich import print
+from rich.table import Table
 from prompt_toolkit import prompt, print_formatted_text, PromptSession
 from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
@@ -164,18 +165,18 @@ class ClamShell:
         return self.python_exec(command)
 
     def print_output(self, output):
-        if (
-            isinstance(output, list)
-            and isinstance(output[0], dict)
-            and output[0].get("path") is not None
-        ):
-            try:
-                df = pd.DataFrame(output)
-                self.console.print(df)
-                return
-            except:
-                pass
-        self.console.print(output)
+        if isinstance(output, FileList):
+            table = Table()
+            for i in output[0].keys():
+                table.add_column(
+                    i,
+                    style=defaultdict(lambda: '', {'name': 'cyan', 'path': 'italic', 'type': 'green'})[i],
+                )
+            for i in output:
+                table.add_row(*list(i.values()))
+            self.console.print(table)
+        else:
+            self.console.print(output)
 
     def compiles_without_errors(self, command):
         try:

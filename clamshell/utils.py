@@ -19,10 +19,19 @@ def get_home():
     else:
         return '/home'
 
+def get_clear_command():
+    if os.name == 'nt':
+        return 'cls'
+    else:
+        return 'clear'
 
 splitter = get_splitter()
 home = get_home()
 original_path = sys.path.copy()
+clear_command = get_clear_command()
+
+class FileList(list):
+    pass
 
 def coerce(value, default):
     if value:
@@ -71,14 +80,17 @@ def files(path=None, recursive=False):
         path += '**'
     elif path [-1] != '*':
         path += f'{splitter}**'
-    file_info = [{
+    file_info = FileList([{
         'name': i,
         'path': os.path.abspath(i),
         'created': get_created_datetime(i),
         'modified': get_modified_datetime(i),
         'type': get_type(i),
-    } for i in glob.glob(path, recursive=recursive)]
+    } for i in glob.glob(path, recursive=recursive)])
     return file_info
+
+def clear():
+    os.system(clear_command)
 
 def map_all_dirs(parent, current_depth=0, max_depth=2):
     # if we've hit bottom depth, we'll return empty list
@@ -195,7 +207,7 @@ def run(command: str):
 
 @try_else_empty_list
 def file_line_matches(search_string: str, file_to_search: dict):
-    matches = []
+    matches = FileList()
     with open(file_to_search['path'], 'r') as match:
         lines = match.readlines()
     for i, line in enumerate(lines):
@@ -215,4 +227,10 @@ def search(search_string: str, path: str = None, recursive=False):
     for file_to_search in files_to_search:
         matches += file_line_matches(search_string, file_to_search)
     return matches
+
+def pipe(*args):
+    result = args[0]
+    for call in args[1:]:
+        result = call(result)
+    return result
 
