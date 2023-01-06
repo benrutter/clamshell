@@ -1,15 +1,10 @@
 import subprocess
 import os
 import threading
-import glob
-import sys
-import time
-import traceback
 from collections import defaultdict
 from pygments.lexers.python import PythonLexer
-from rich import print
 from rich.table import Table
-from prompt_toolkit import prompt, print_formatted_text, PromptSession
+from prompt_toolkit import prompt, PromptSession
 from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.history import FileHistory
@@ -207,6 +202,7 @@ class ClamShell:
                 result = python_result
         return result
 
+    @capture_and_return_exception
     def repl(self):
         command = self.prompt()
         result = self.meta_exec(command)
@@ -244,5 +240,3 @@ class ClamShell:
             th.join()
         return self.command
 
-    def exit(self):
-        self.run_repl = False

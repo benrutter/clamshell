@@ -7,6 +7,7 @@ import glob
 
 from send2trash import send2trash
 
+import .meta_functions
 
 def get_splitter():
     if os.name == 'nt':
@@ -38,35 +39,20 @@ def coerce(value, default):
         return value
     return default
 
-def try_else_none(function):
-    def wrapped_function(*args, **kwargs):
-        try:
-            return function(*args, **kwargs)
-        except:
-            return None
-    return wrapped_function
 
-def try_else_empty_list(function):
-    def wrapped_function(*args, **kwargs):
-        try:
-            return function(*args, **kwargs)
-        except:
-            return []
-    return wrapped_function
-
-@try_else_none
+@meta_functions.try_else_none
 def get_created_datetime(file):
     created = os.path.getctime(file)
     created = time.ctime(created)
     return created
 
-@try_else_none
+@meta_functions.try_else_none
 def get_modified_datetime(file):
     modified = os.path.getmtime(file)
     modified = time.ctime(modified)
     return modified
 
-@try_else_none
+@meta_functions.try_else_none
 def get_type(file):
     if os.path.isfile(file):
         return 'file'
@@ -164,13 +150,6 @@ def make_file(path: str):
 def make_directory(path: str):
     os.makedirs(path, exist_ok=False)
     return f'[green]{path} created[/green]'
-
-def get_prompt():
-    cwd = os.getcwd()
-    return f" 🐚 {cwd} $ "
-
-def get_continuation_prompt():
-    return " ... "
 
 
 def sandwich_split(string, splitters=[' ', '"', "'"]):
