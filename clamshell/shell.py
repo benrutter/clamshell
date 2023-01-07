@@ -2,69 +2,79 @@ import subprocess
 import os
 import threading
 from collections import defaultdict
+from typing import Callable, List, Dict, Type
+
 from pygments.lexers.python import PythonLexer
 from rich.table import Table
+from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit import prompt, PromptSession
 from prompt_toolkit.lexers import PygmentsLexer
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.history import FileHistory
-from rich.console import Console
+from rich import print
 from prompt_toolkit.output.color_depth import ColorDepth
 
-from .utils import *
+from . import meta_functions, defaults, shell_utils
 from .key_bindings import key_bindings
+from .types import FileList
 
-
-def capture_and_return_exception(function):
-    def new_function(*args, **kwargs):
-        try:
-            return function(*args, **kwargs)
-        except Exception as exception:
-            return f"[red bold] ! >> {str(repr(exception))}[/red bold]"
-
-    return new_function
 
 class ClamShell:
+    """
+    Class handles environment, and running of commands given in shell.
+    """
+
     def __init__(
         self,
         super_commands: list = None,
-        aliases: dict = None,
-        get_prompt=get_prompt,
-        get_continuation_prompt=get_continuation_prompt,
-        shell_globals=None,
-        shell_locals=None,
+        aliases: Dict[str, str] = None,
+        get_prompt: callable = defaults.get_prompt,
+        get_continuation_prompt: callable = defaults.get_continuation_prompt,
+        shell_globals: dict = None,
+        shell_locals: dict = None,
     ):
-        self.console = Console(color_system="auto")
-        self.super_commands = coerce(super_commands, [])
-        self.aliases = coerce(aliases, [])
-        self.lexer = PygmentsLexer(PythonLexer)
-        self.globals = coerce(shell_globals, globals())
-        self.locals = coerce(shell_locals, locals())
-        history_file = self.history_file()
-        self.session = PromptSession(history=FileHistory(history_file))
-        self.key_bindings = key_bindings
-        self.run_repl = True
-        self.get_prompt = get_prompt
-        self.get_continuation_prompt = get_continuation_prompt
-        self.command = None
+        self.super_commands: List[str] = meta_functions.coerce(super_commands, [])
+        self.aliases: Dict[str, str] = meta_functions.coerce(aliases, [])
+        self.lexer: PygmentsLexer = PygmentsLexer(PythonLexer)
+        self.globals: dict = meta_functions.coerce(shell_globals, globals())
+        self.locals: list = meta_functions.coerce(shell_locals, locals())
+        history_file: str = self.history_file()
+        self.session: PromptSession = PromptSession(history=FileHistory(history_file))
+        self.key_bindings: KeyBindings = key_bindings
+        self.get_prompt: Callable = get_prompt
+        self.get_continuation_prompt: Callable = get_continuation_prompt
+        self.command: str = None
+        self.output: Type = None
 
-    def history_file(self):
-        home = get_home()
-        splitter = get_splitter()
-        history_file = f'{home}{splitter}.config{splitter}clamshell{splitter}history'
+    def history_file(self) -> str:
+        """
+        Infers and returns location of history file
+        """
+        home: str = shell_utils.home
+        splitter: str = shell_utils.splitter
+        history_file: str = (
+            f"{home}{splitter}.config{splitter}clamshell{splitter}history"
+        )
         if not os.path.exists(history_file):
-            make_file(history_file)
+            shell_utils.make_file(history_file)
         return history_file
 
-    def rc_file(self):
-        home = get_home()
-        splitter = get_splitter()
-        rc_file = f'{home}{splitter}.config{splitter}clamshell{splitter}clamrc.py'
+    def rc_file(self) -> str:
+        """
+        Infers and returns location of clamrc file
+        """
+        home: str = shell_utils.home
+        splitter: str = shell_utils.splitter
+        rc_file: str = f"{home}{splitter}.config{splitter}clamshell{splitter}clamrc.py"
         if not os.path.exists(rc_file):
-            make_file(rc_file)
+            shell_utils.make_file(rc_file)
         return rc_file
 
-    def is_uncompleted(self, string):
+    def is_uncompleted(self, command: str) -> bool:
+        """
+        Checks for unclosed brackets, speech marks etc,
+        and returns bool based on them being present
+        """
         completion_dict = {
             "(": ")",
             "{": "}",
@@ -72,36 +82,48 @@ class ClamShell:
             '"': '"',
             "'": "'",
         }
-        last = None
-        for char in string:
+        last: str = None
+        for char in command:
             if last is not None:
                 if char == completion_dict[last]:
-                    last = None
+                    last: str = None
             elif char in list(completion_dict.keys()):
-                last = char
-        return last is not None
+                last: str = char
+        completed: bool = last is not None
+        return completed
 
-    def with_quotes_if_undefined(self, string):
+    def with_quotes_if_undefined(self, name: str) -> str:
+        """
+        Checks whether name is defined (if not, adds quotes around it)
+        """
         try:
-            eval(string, self.globals, self.locals)
-            return string
+            eval(name, self.globals, self.locals)
+            return name
         except:
-            return f'"{string}"'
+            return f'"{name}"'
 
-    def flatten_list(self, list_of_lists):
+    def flatten_list(self, list_of_lists: List[list]) -> list:
+        """
+        Takes a list of list of values and returns list of values
+        """
         return [item for sublist in list_of_lists for item in sublist]
 
-    def sandwich_split(self, string, splitters=[" ", '"', "'"]):
-        split = splitters[0]
-        segments = []
-        accumulator = ""
+    def sandwich_split(
+        self, string, splitters: List[str] = [" ", '"', "'"]
+    ) -> List[str]:
+        """
+        Splits items from start to end of splitter, without interception
+        """
+        split: str = splitters[0]
+        segments: list = []
+        accumulator: str = ""
         for char in string:
             # if the char is out current split
             # then this accumulator is over
             if char == split:
                 accumulator += char
                 segments.append(accumulator)
-                accumulator = ""
+                accumulator: str = ""
             # otherwise, if the char is a splitter
             # then
             elif char in splitters:
@@ -112,104 +134,144 @@ class ClamShell:
         segments.append(accumulator)
         return segments
 
-    def break_into_pieces(self, string):
-        pieces = self.sandwich_split(string)
+    def break_into_pieces(self, string: str) -> List[str]:
+        """
+        Breaks a string into individual pieces based on
+        use of sandwich_split function
+        """
+        pieces: List[str] = self.sandwich_split(string)
         pieces = [i.strip() for i in pieces]
         pieces = [i for i in pieces if i != ""]
         return pieces
 
-    def reform(self, pieces):
+    def reform(self, pieces: List[str]) -> str:
+        """
+        Forms individual pieces into a function call based on
+        clam syntax
+        """
         remade = f'{pieces[0]}({", ".join(pieces[1:])})'
         return remade
 
-    @capture_and_return_exception
-    def python_exec(self, command: str):
+    @meta_functions.capture_and_return_exception
+    def python_exec(self, command: str) -> Type:
+        """
+        Executes as python (attempts evaluation first)
+        """
         try:
             return eval(command, self.globals, self.locals)
         except SyntaxError:
             return exec(command, self.globals, self.locals)
 
-    def clam_compile(self, command: str):
-        pieces = self.break_into_pieces(command)
+    def clam_compile(self, command: str) -> str:
+        """
+        Converts a string into python executable based on clam syntax
+        """
+        pieces: List[str] = self.break_into_pieces(command)
         pieces = [pieces[0]] + [self.with_quotes_if_undefined(i) for i in pieces[1:]]
-        reformed = self.reform(pieces)
+        reformed: str = self.reform(pieces)
         return reformed
 
-    @capture_and_return_exception
-    def clam_exec(self, command: str):
-        reformed = self.clam_compile(command)
-        try:
-            return self.python_exec(reformed)
-        except Exceptions as e:
-            return str(repr(e))
+    @meta_functions.capture_and_return_exception
+    def clam_exec(self, command: str) -> Type:
+        """
+        Compiles based on clam syntax then executes as python
+        """
+        reformed: str = self.clam_compile(command)
+        return self.python_exec(reformed)
 
-    @capture_and_return_exception
-    def shell_exec(self, command: str):
+    @meta_functions.capture_and_return_exception
+    def shell_exec(self, command: str) -> str:
         for key, value in self.aliases.items():
             if command[: len(key)] == key:
                 command = value + command[len(key) :]
                 break
-        pieces = self.break_into_pieces(command)
-        output = subprocess.call(pieces)
+        pieces: List[str] = self.break_into_pieces(command)
+        output: int = subprocess.call(pieces)
         output = f"\n[italic]output: {output}[/italic]"
+        return output
 
-    @capture_and_return_exception
-    def super_exec(self, command: str):
+    @meta_functions.capture_and_return_exception
+    def super_exec(self, command: str) -> Type:
+        """
+        Takes command of function name and executes no argument call
+        """
         assert len(command.strip().split(" ")) == 1
         command += "()"
         return self.python_exec(command)
 
-    def print_output(self, output):
-        if isinstance(output, FileList):
+    def print_output(self) -> None:
+        """
+        Custom print of output
+        """
+        if self.output is None:
+            return
+        if isinstance(self.output, FileList):
             table = Table()
-            for i in output[0].keys():
+            for i in self.output[0].keys():
                 table.add_column(
                     i,
-                    style=defaultdict(lambda: '', {'name': 'cyan', 'path': 'italic', 'type': 'green'})[i],
+                    style=defaultdict(
+                        lambda: "", {"name": "cyan", "path": "italic", "type": "green"}
+                    )[i],
                 )
-            for i in output:
+            for i in self.output:
                 table.add_row(*list(i.values()))
-            self.console.print(table)
+            print(table)
         else:
-            self.console.print(output)
+            print(self.output)
 
-    def compiles_without_errors(self, command):
+    def compiles_without_errors(self, command: str) -> bool:
+        """
+        Returns true if command string can compile to python without
+        throwing a SyntaxError, otherwise false
+        """
         try:
             compile(command, "<string>", mode="exec")
             return True
         except SyntaxError:
             return False
 
-    def meta_exec(self, command):
-        # rule is, will it compile as python or clam?
-        # if it works as one, run
-        # if that throws a name error, then
-        # execute as subprocess
-        if command in self.super_commands:
-            return self.super_exec(command)
-        elif self.compiles_without_errors(command):
-            result = self.python_exec(command)
-        elif self.compiles_without_errors(self.clam_compile(command)):
-            result = self.clam_exec(command)
+    @meta_functions.capture_and_return_exception
+    def meta_exec(self) -> None:
+        """
+        Execution order for the self.command string, as follows:
+            - If 'super self.command' will run as so
+            - Otherwise, will see if it can compile to:
+                - Python
+                - Then "clam python"
+                - (Will run as one of those if it can)
+            - Will run as a subprocess if those conditions aren't met
+            - (or if python running throws a name error)
+        """
+        if self.command in self.super_commands:
+            result: Type = self.super_exec(self.command)
+        elif self.compiles_without_errors(self.command):
+            result: Type = self.python_exec(self.command)
+        elif self.compiles_without_errors(self.clam_compile(self.command)):
+            result: Type = self.clam_exec(self.command)
         else:
-            result = self.shell_exec(command)
+            result: Type = self.shell_exec(self.command)
         if isinstance(result, str) and result.startswith("[red bold] ! >> NameError("):
-            python_result = result
-            result = self.shell_exec(command)
+            python_result: Type = result
+            result: Type = self.shell_exec(self.command)
             if isinstance(result, str) and result.startswith(
                 "[red bold] ! >> FileNotFoundError("
             ):
                 result = python_result
-        return result
+        self.output = result
 
-    @capture_and_return_exception
-    def repl(self):
-        command = self.prompt()
-        result = self.meta_exec(command)
-        if result is not None:
-            self.print_output(result)
+    def repl(self) -> None:
+        """
+        Central read-evaluate-print loop
+        """
+        self.prompt()
+        self.meta_exec()
+        self.print_output()
 
-    def initial_prompt(self):
+    def initial_prompt(self) -> None:
+        """
+        Sets first prompt to self.command value
+        """
         self.command = self.session.prompt(
             self.get_prompt(),
             lexer=self.lexer,
@@ -218,8 +280,11 @@ class ClamShell:
             color_depth=ColorDepth.ANSI_COLORS_ONLY,
         )
 
-    def continuation_prompt(self):
-        new_line = None
+    def continuation_prompt(self) -> None:
+        """
+        Uses continuation prompt to append to self.command
+        """
+        new_line: str = ""
         while new_line != "":
             new_line = self.session.prompt(
                 self.get_continuation_prompt(),
@@ -230,13 +295,17 @@ class ClamShell:
             )
             self.command += f"\n{new_line}"
 
-    def prompt(self):
-        th = threading.Thread(target=self.initial_prompt)
+    def prompt(self) -> None:
+        """
+        Runs inital_prompt and continuation_prompt in own thread
+        (so that async of prompt doesn't affect anything ran)
+        """
+        th: threading.Thread = threading.Thread(target=self.initial_prompt)
         th.start()
         th.join()
-        if self.command != "" and (self.command[-1] == ":" or self.is_uncompleted(self.command)):
-            th = threading.Thread(target=self.continuation_prompt)
+        if self.command != "" and (
+            self.command[-1] == ":" or self.is_uncompleted(self.command)
+        ):
+            th: threading.Thread = threading.Thread(target=self.continuation_prompt)
             th.start()
             th.join()
-        return self.command
-
