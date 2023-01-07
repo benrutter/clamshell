@@ -186,6 +186,14 @@ class ClamShell:
                 command = value + command[len(key) :]
                 break
         pieces: List[str] = self.break_into_pieces(command)
+        pieces = [
+            i
+            if not (i.startswith('"') and i.endswith('"'))
+            or (i.startswith("'") and i.endswith("'"))
+            else i[1:-1]
+            for i in pieces
+        ]
+        import pdb; pdb.set_trace()
         output: int = subprocess.call(pieces)
         output = f"\n[italic]output: {output}[/italic]"
         return output
