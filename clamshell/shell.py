@@ -117,18 +117,15 @@ class ClamShell:
         split: str = splitters[0]
         segments: list = []
         accumulator: str = ""
+
         for char in string:
-            # if the char is out current split
-            # then this accumulator is over
             if char == split:
                 accumulator += char
                 segments.append(accumulator)
                 accumulator: str = ""
-            # otherwise, if the char is a splitter
-            # then
-            elif char in splitters:
-                split = char
+            elif accumulator == "" and char in splitters:
                 accumulator += char
+                split = char
             else:
                 accumulator += char
         segments.append(accumulator)
@@ -186,14 +183,6 @@ class ClamShell:
                 command = value + command[len(key) :]
                 break
         pieces: List[str] = self.break_into_pieces(command)
-        pieces = [
-            i
-            if not (i.startswith('"') and i.endswith('"'))
-            or (i.startswith("'") and i.endswith("'"))
-            else i[1:-1]
-            for i in pieces
-        ]
-        import pdb; pdb.set_trace()
         output: int = subprocess.call(pieces)
         output = f"\n[italic]output: {output}[/italic]"
         return output
@@ -292,7 +281,7 @@ class ClamShell:
         """
         Uses continuation prompt to append to self.command
         """
-        new_line: str = ""
+        new_line: str = None
         while new_line != "":
             new_line = self.session.prompt(
                 self.get_continuation_prompt(),
