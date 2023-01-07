@@ -1,0 +1,3 @@
+class FileList(list):
+    pass
+
