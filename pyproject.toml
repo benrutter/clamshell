@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "clamshell"
-version = "0.1"
+version = "0.2"
 description = "An experimental shell for the modern age!"
 readme = "README.md"
 requires-python = ">=3.6"
