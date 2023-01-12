@@ -196,13 +196,13 @@ class ClamShell:
         command += "()"
         return self.python_exec(command)
 
-    def print_output(self) -> None:
+    def print_output(self, *args) -> None:
         """
         Custom print of output
         """
         if self.output is None:
             return
-        if isinstance(self.output, FileList):
+        if isinstance(self.output, FileList) and len(self.output) > 0:
             table = Table()
             for i in self.output[0].keys():
                 table.add_column(
