@@ -1,6 +1,7 @@
 import os
 import sys
 import subprocess
+from subprocess import run
 import time
 import shutil
 import glob
@@ -183,12 +184,6 @@ def break_into_pieces(string):
     pieces = [i.strip() for i in pieces]
     pieces = [i for i in pieces if i != ""]
     return pieces
-
-
-def run(command: str):
-    pieces = break_into_pieces(command)
-    proc = subprocess.Popen(pieces, stdout=subprocess.PIPE)
-    return proc.communicate()[0].decode()
 
 
 @meta_functions.try_else_empty_list
