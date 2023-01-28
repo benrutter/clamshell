@@ -148,10 +148,10 @@ which means it'll include hidden files and folders, and recur into folders up to
 Because the return is a list, we can do things like loop through it's return (although note that for setting variables, we no longer get to use our fun clam syntax 🥲):
 
 ```clam
-~/me $_ x = files('Music')
-~/me $_ for item in x:
-      >     if 'Rick Astley' not in x['name']:
-      >         delete(x['path'])
+~/me $_ tunes = files('Music')
+~/me $_ for item in tunes:
+      >     if 'Rick Astley' not in item['name']:
+      >         delete(item['path'])
 ```
 
 Phew! That deleted every file and folder in Music that didn't have Rick Astley in the name (more on delete later)
