@@ -68,26 +68,29 @@ def get_type(file):
     else:
         return "directory"
 
+@meta_functions.try_else_none
+def file_metadata(path):
+    return {
+        "name": path,
+        "path": os.path.abspath(path),
+        "created": get_created_datetime(path),
+        "modified": get_modified_datetime(path),
+        "type": get_type(path),
+    }
 
-def files(path=None, recursive=False):
-    if path is None:
-        path = "**"
-    elif path[-1] == splitter:
-        path += "**"
-    elif path[-1] != "*":
-        path += f"{splitter}**"
-    file_info = FileList(
-        [
-            {
-                "name": i,
-                "path": os.path.abspath(i),
-                "created": get_created_datetime(i),
-                "modified": get_modified_datetime(i),
-                "type": get_type(i),
-            }
-            for i in glob.glob(path, recursive=recursive)
-        ]
-    )
+def files(path=None, hidden=False, recursive=0):
+    file_info = [file_metadata(i) for i in os.listdir(path)]
+    file_info = [i for i in file_info if i is not None]
+    if not hidden:
+        file_info = [i for i in file_info if not i['name'].startswith('.')]
+    file_info = FileList(file_info)
+    if recursive == 0:
+        return file_info
+    for folder in [i['path'] for i in file_info if i['type'] == 'folder']:
+        try:
+            file_info += FileList(files(folder, recursive-1))
+        except:
+            pass
     return file_info
 
 
@@ -219,8 +222,9 @@ def pipe(*args):
         result = call(result)
     return result
 
-
 def map_all_dirs(parent: str, current_depth: int = 0, max_depth: int = 2) -> List[str]:
+    initial_dir = os.getcwd()
+    os.chdir(parent)
     # if we've hit bottom depth, we'll return empty list
     if current_depth > max_depth:
         return []
@@ -236,7 +240,12 @@ def map_all_dirs(parent: str, current_depth: int = 0, max_depth: int = 2) -> Lis
     # then add recursive steps
     to_recur: List[str] = new_dirs.copy()
     for i in to_recur:
-        new_dirs += map_all_dirs(i, current_depth + 1, max_depth)
+        try:
+            new_dirs += map_all_dirs(i, current_depth + 1, max_depth)
+        except:
+            pass
+    os.chdir(initial_dir)
+    new_dirs = [i for i in new_dirs if i is not None]
     return new_dirs
 
 
