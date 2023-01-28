@@ -14,13 +14,15 @@ I love working in the terminal, and use Bash all the time, but there's a bunch o
 - Easier syntax (does anyone actually know how to define a function, loop through something, add two numbers without having to look it up every time?)
 - Less terse (This is the most subjective, but built in functions like 'cd', 'ls' are designed to be quick to type, but we have autocompletion for that- I'd rather things were more obvious to beginners)
 
+It seems odd to me that as developers, our daily diver is missing so much of the functionality that we demand from our modern languages.
+
 I built clamshell as an experiment to think about what an ideal shell utopia might look like.
 
 It's an experiment, and you can run it on windows, mac or linux.
 
 ### That sounds like xonsh
 
-Yes it does! Xonsh is actually a much better idea if you're looking for something to use since it is production ready, has less dependencies and a safer execution pattern (check it out!)[]
+Yes it does! Xonsh is actually a much better idea if you're looking for something to use since it is production ready, has less dependencies and a safer execution pattern [check it out!](https://xon.sh/)
 
 But, xonsh is based on the idea of using python *with* another existing shell language like bash, I wanted to experiment with what it would be like to actually have a *fully python shell* - where your standard shell commands had types, and where python functions could get ran just like command line arguments/
 
