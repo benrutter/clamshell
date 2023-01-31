@@ -35,7 +35,7 @@ def get_home():
     """
     if is_windows():
         return os.environ["USERPROFILE"]
-    return f'/home/{os.environ["USER"]}'
+    return os.environ["HOME"]
 
 
 def get_clear_command():
