@@ -196,7 +196,7 @@ class ClamShell:
         command += "()"
         return self.python_exec(command)
 
-    def print_output(self, *args) -> None:
+    def print_output(self) -> None:
         """
         Custom print of output
         """
@@ -261,6 +261,7 @@ class ClamShell:
         """
         Central read-evaluate-print loop
         """
+        self.command = None
         self.prompt()
         self.meta_exec()
         self.print_output()
@@ -277,6 +278,7 @@ class ClamShell:
             color_depth=ColorDepth.ANSI_COLORS_ONLY,
         )
 
+    @meta_functions.try_else_none
     def continuation_prompt(self) -> None:
         """
         Uses continuation prompt to append to self.command
@@ -292,17 +294,18 @@ class ClamShell:
             )
             self.command += f"\n{new_line}"
 
+    @meta_functions.try_else_none
     def prompt(self) -> None:
         """
         Runs inital_prompt and continuation_prompt in own thread
         (so that async of prompt doesn't affect anything ran)
         """
-        th: threading.Thread = threading.Thread(target=self.initial_prompt)
+        th: threading.Thread = threading.Thread(target=meta_functions.try_else_none(self.initial_prompt))
         th.start()
         th.join()
         if self.command != "" and (
             self.command[-1] == ":" or self.is_uncompleted(self.command)
         ):
-            th: threading.Thread = threading.Thread(target=self.continuation_prompt)
+            th: threading.Thread = threading.Thread(target=meta_functions.try_else_none(self.continuation_prompt))
             th.start()
             th.join()

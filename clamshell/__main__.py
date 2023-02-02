@@ -60,7 +60,7 @@ def run_clam():
         try:
             clamshell.repl()
         except KeyboardInterrupt:
-            clamshell.print_output("")
+            pass
 
 if __name__ == '__main__':
     run_clam()

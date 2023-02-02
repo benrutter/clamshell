@@ -4,15 +4,15 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "clamshell"
-version = "0.3"
+version = "0.4"
 description = "An experimental shell for the modern age!"
 readme = "README.md"
 requires-python = ">=3.6"
 dependencies = [
-    "send2trash"
-    "prompt-toolkit"
-    "pygments"
-    "rich"
+    "send2trash",
+    "prompt-toolkit",
+    "pygments",
+    "rich",
 ]
 
 [project.scripts]
