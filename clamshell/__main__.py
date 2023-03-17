@@ -45,13 +45,18 @@ try:
     if "get_continuation_prompt" in locals():
         clamshell.get_continuation_prompt = get_continuation_prompt
         del get_continuation_prompt
+    if "environment_variables" in locals():
+        for k, v in environment_variables.items():
+            environ[k] = v
+        del environment_variables
     del splitter
     del sys
     del rc_path
     del rc_file
-except:
+except Exception as e:
     print(
         "[red]Error loading/running clamrc!\n"
+        f"{e}\n"
         "(likely error in .config/clamrc.py script)[/red]"
     )
 
